@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.5.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.10.0" />
     <PackageReference Include="Microsoft.Azure.WebJobs.Extensions.OpenApi" Version="0.7.1-preview" />
     <PackageReference Include="Microsoft.Azure.WebJobs.Extensions.Storage" Version="3.0.10" />
     <PackageReference Include="Microsoft.Graph" Version="4.7.0" />
