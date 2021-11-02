@@ -46,7 +46,7 @@ namespace Microsoft.Azure
                                 FirstName = rowColumns[1],
                                 CompanyName = rowColumns[3],
                                 Email = rowColumns[4],
-                                SendInvitationMessage = false
+                                SendInvitationMessage = true
                             };
                             users.Add(user);
                         }
@@ -73,36 +73,9 @@ namespace Microsoft.Azure
         {
             try
             {
-                string graphEndpoint = Environment.GetEnvironmentVariable("graphEndpoint");
-                string graphScope = $"{graphEndpoint}/.default";
-                string graphUri = $"{graphEndpoint}/v1.0";
-                string clientId = Environment.GetEnvironmentVariable("clientId");
-                string clientSecret = Environment.GetEnvironmentVariable("clientSecret");
-                string tenantId = Environment.GetEnvironmentVariable("tenantId");
                 string redirectUri = Environment.GetEnvironmentVariable("redirectUri");
-                string loginUri = Environment.GetEnvironmentVariable("loginUri");
-                string tenantDomain = Environment.GetEnvironmentVariable("tenantDomain");
-                loginUri = $"{loginUri}/{tenantId}/oauth2/v2.0/token";
-                var scopes = new[] { graphScope };
 
-                var clientApplication = ConfidentialClientApplicationBuilder
-                .Create(clientId)
-                .WithTenantId(tenantId)
-                .WithClientSecret(clientSecret)
-                .WithAuthority(loginUri)
-                .Build();
-
-                var authenticationResult = await clientApplication.AcquireTokenForClient(scopes).ExecuteAsync();
-
-                // Create GraphClient and attach auth header to all request (acquired on previous step)
-                var graphClient = new GraphServiceClient(graphUri,
-                    new DelegateAuthenticationProvider(requestMessage =>
-                    {
-                        requestMessage.Headers.Authorization =
-                            new AuthenticationHeaderValue("bearer", authenticationResult.AccessToken);
-
-                        return Task.FromResult(0);
-                    }));
+                var graphClient = await GetGraphServiceClient();
                 var userDisplayName = String.IsNullOrEmpty(userInfo.DisplayName) ? $"{userInfo.FirstName} {userInfo.LastName}" : userInfo.DisplayName;
 
                 var invitation = new Invitation
@@ -112,21 +85,23 @@ namespace Microsoft.Azure
                     InviteRedirectUrl = redirectUri,
                     SendInvitationMessage = userInfo.SendInvitationMessage
                 };
-                await graphClient.Invitations.Request().AddAsync(invitation);
-                
-                //var users = graphClient.Users.Request().GetAsync().Result;
+                var ret = await graphClient.Invitations.Request().AddAsync(invitation);
 
-
-                var emailAddressParts = userInfo.Email.Split("@");
-                var upn = $"{emailAddressParts[0]}_{emailAddressParts[1]}#EXT#@{tenantDomain}";
-                
-                var updateUser = new User
+                string userId = null;
+                int loopCounter = 0;
+                while (String.IsNullOrEmpty(userId) && loopCounter < 10000) //todo figure out a better way to anticipate the creation of the user object
+                {
+                    var filterString = "";  //todo fix this filter string to pre-filter results
+                    var users = graphClient.Users.Request().Filter(filterString).GetAsync().Result;
+                    var filteredUser = users.Where(u => u.Mail == userInfo.Email).FirstOrDefault();
+                    if (filteredUser != null) { userId = filteredUser.Id; }
+                    loopCounter++;
+                }
+                var user = new User
                 {
                     CompanyName = userInfo.CompanyName
                 };
-                
-                await graphClient.Users[upn].Request().UpdateAsync(updateUser); //todo fix why this isn't finding the user
-                
+                await graphClient.Users[userId].Request().UpdateAsync(user); 
                 var responseMessage = "Success";
 
                 return new OkObjectResult(responseMessage);
@@ -135,6 +110,42 @@ namespace Microsoft.Azure
             {
                 return new BadRequestObjectResult(ex.Message);
             }
+        }
+        private static async Task<GraphServiceClient> GetGraphServiceClient()
+        {
+
+            string graphEndpoint = Environment.GetEnvironmentVariable("graphEndpoint");
+            string graphScope = $"{graphEndpoint}/.default";
+            string graphUri = $"{graphEndpoint}/v1.0";
+            string clientId = Environment.GetEnvironmentVariable("clientId");
+            string clientSecret = Environment.GetEnvironmentVariable("clientSecret");
+            clientId = "663991fb-a753-4a9b-b97d-0b508648d589";
+            clientSecret = "RV07Q~6k2K205DL9tNGfed2t_hmgFO6DmyI7R";
+
+            string tenantId = Environment.GetEnvironmentVariable("tenantId");
+            string loginUri = Environment.GetEnvironmentVariable("loginUri");
+            string tenantDomain = Environment.GetEnvironmentVariable("tenantDomain");
+            loginUri = $"{loginUri}/{tenantId}/oauth2/v2.0/token";
+            var scopes = new[] { graphScope };
+
+            var clientApplication = ConfidentialClientApplicationBuilder
+            .Create(clientId)
+            .WithTenantId(tenantId)
+            .WithClientSecret(clientSecret)
+            .WithAuthority(loginUri)
+            .Build();
+
+            var authenticationResult = await clientApplication.AcquireTokenForClient(scopes).ExecuteAsync();
+
+            // Create GraphClient and attach auth header to all request (acquired on previous step)
+            return new GraphServiceClient(graphUri,
+                 new DelegateAuthenticationProvider(requestMessage =>
+                 {
+                     requestMessage.Headers.Authorization =
+                         new AuthenticationHeaderValue("bearer", authenticationResult.AccessToken);
+
+                     return Task.FromResult(0);
+                 }));
         }
         public class UserInfo
         {
