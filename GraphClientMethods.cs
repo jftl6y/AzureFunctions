@@ -1,22 +1,16 @@
 using System;
-using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
-using Newtonsoft.Json;
 using System.Net.Http.Headers;
-using System.Collections.Generic;
 using System.Linq;
 
 using Microsoft.Graph;
 
 namespace Microsoft.Azure
 {
-    public class GraphClientMethods {
+    public class GraphClientMethods
+    {
         public static async Task<IActionResult> SendUserInfo(UserInfo userInfo)
         {
             try
@@ -25,31 +19,37 @@ namespace Microsoft.Azure
 
                 var graphClient = await GetGraphServiceClient();
                 var userDisplayName = String.IsNullOrEmpty(userInfo.DisplayName) ? $"{userInfo.FirstName} {userInfo.LastName}" : userInfo.DisplayName;
-
-                var invitation = new Invitation
-                {
-                    InvitedUserDisplayName = userDisplayName,
-                    InvitedUserEmailAddress = userInfo.Email,
-                    InviteRedirectUrl = redirectUri,
-                    SendInvitationMessage = userInfo.SendInvitationMessage
-                };
-                var ret = await graphClient.Invitations.Request().AddAsync(invitation);
-
                 string userId = null;
-                int loopCounter = 0;
-                while (String.IsNullOrEmpty(userId) && loopCounter < 10000) //todo figure out a better way to anticipate the creation of the user object
+                var filterString = $"Mail eq '{userInfo.Email}'";
+                var users = await graphClient.Users.Request().Filter(filterString).Select("Id, Mail").GetAsync();
+                var filteredUser = users.Where(u => u.Mail == userInfo.Email).FirstOrDefault();
+                if (filteredUser != null) {userId = filteredUser.Id;}
+                if (String.IsNullOrEmpty(userId))
                 {
-                    var filterString = "";  //todo fix this filter string to pre-filter results
-                    var users = graphClient.Users.Request().Filter(filterString).GetAsync().Result;
-                    var filteredUser = users.Where(u => u.Mail == userInfo.Email).FirstOrDefault();
-                    if (filteredUser != null) { userId = filteredUser.Id; }
-                    loopCounter++;
+                    var invitation = new Invitation
+                    {
+                        InvitedUserDisplayName = userDisplayName,
+                        InvitedUserEmailAddress = userInfo.Email,
+                        InviteRedirectUrl = redirectUri,
+                        SendInvitationMessage = userInfo.SendInvitationMessage
+                    };
+                    await graphClient.Invitations.Request().AddAsync(invitation);
+
+
+                    int loopCounter = 0;
+                    while (String.IsNullOrEmpty(userId) && loopCounter < 10000) //todo figure out a better way to anticipate the creation of the user object
+                    {
+                        users = await graphClient.Users.Request().Filter(filterString).Select("Id, Mail").GetAsync();
+                        filteredUser = users.Where(u => u.Mail == userInfo.Email).FirstOrDefault();
+                        if (filteredUser != null) {userId = filteredUser.Id;}
+                        loopCounter++;
+                    }
                 }
                 var user = new User
                 {
                     CompanyName = userInfo.CompanyName
                 };
-                await graphClient.Users[userId].Request().UpdateAsync(user); 
+                await graphClient.Users[userId].Request().UpdateAsync(user);
                 var responseMessage = "Success";
 
                 return new OkObjectResult(responseMessage);
@@ -67,7 +67,6 @@ namespace Microsoft.Azure
             string graphUri = $"{graphEndpoint}/v1.0";
             string clientId = Environment.GetEnvironmentVariable("clientId");
             string clientSecret = Environment.GetEnvironmentVariable("clientSecret");
-
             string tenantId = Environment.GetEnvironmentVariable("tenantId");
             string loginUri = Environment.GetEnvironmentVariable("loginUri");
             string tenantDomain = Environment.GetEnvironmentVariable("tenantDomain");
