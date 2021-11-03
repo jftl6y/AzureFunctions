@@ -67,8 +67,6 @@ namespace Microsoft.Azure
             string graphUri = $"{graphEndpoint}/v1.0";
             string clientId = Environment.GetEnvironmentVariable("clientId");
             string clientSecret = Environment.GetEnvironmentVariable("clientSecret");
-            clientId = "663991fb-a753-4a9b-b97d-0b508648d589";
-            clientSecret = "RV07Q~6k2K205DL9tNGfed2t_hmgFO6DmyI7R";
 
             string tenantId = Environment.GetEnvironmentVariable("tenantId");
             string loginUri = Environment.GetEnvironmentVariable("loginUri");
