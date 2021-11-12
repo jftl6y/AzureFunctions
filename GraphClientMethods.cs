@@ -20,9 +20,10 @@ namespace Microsoft.Azure
                 var graphClient = await GetGraphServiceClient();
                 var userDisplayName = String.IsNullOrEmpty(userInfo.DisplayName) ? $"{userInfo.FirstName} {userInfo.LastName}" : userInfo.DisplayName;
                 string userId = null;
-                var filterString = $"Mail eq '{userInfo.Email}'";
-                var users = await graphClient.Users.Request().Filter(filterString).Select("Id, Mail").GetAsync();
-                var filteredUser = users.Where(u => u.Mail == userInfo.Email).FirstOrDefault();
+                var filterExpression = new GraphFilterExpression("Mail", "eq", userInfo.Email);
+                //var filterString = $"Mail eq '{userInfo.Email}'";
+                var users = await graphClient.Users.Request().Filter(filterExpression.ToString()).Select("Id, Mail").GetAsync();
+                var filteredUser = users.Where(u => u.Mail == filterExpression.FilterValue).FirstOrDefault();
                 if (filteredUser != null) {userId = filteredUser.Id;}
                 if (String.IsNullOrEmpty(userId))
                 {
@@ -39,7 +40,7 @@ namespace Microsoft.Azure
                     int loopCounter = 0;
                     while (String.IsNullOrEmpty(userId) && loopCounter < 10000) //todo figure out a better way to anticipate the creation of the user object
                     {
-                        users = await graphClient.Users.Request().Filter(filterString).Select("Id, Mail").GetAsync();
+                        users = await graphClient.Users.Request().Filter(filterExpression.ToString()).Select("Id, Mail").GetAsync();
                         filteredUser = users.Where(u => u.Mail == userInfo.Email).FirstOrDefault();
                         if (filteredUser != null) {userId = filteredUser.Id;}
                         loopCounter++;

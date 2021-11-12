@@ -9,4 +9,5 @@ namespace Microsoft.Azure
             public string Email { get; set; }
             public bool SendInvitationMessage { get; set; }
         }
+    
 }
